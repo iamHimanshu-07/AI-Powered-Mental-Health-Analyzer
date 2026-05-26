@@ -46,8 +46,3 @@ To train the model:
 ```
 python bert.py  --mode "train" --model_name "bert-base-cased" --epochs 25 --batch_size 8 --max_length 256
 ```
-
-# Contact
-Please feel free to ask or discuss with us.
-* Email: abubakarsiddiqurra@unomaha.edu
-* Email: tahoangthang@gmail.com
