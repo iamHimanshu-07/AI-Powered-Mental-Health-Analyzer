@@ -72,9 +72,7 @@ def clean_text(text):
 
 for item in train_set: item['text'] = clean_text(item['text'])
 
-for i in range(0,5): print(train_set[i]['text']
-
-,end="\n\n")
+for i in range(0,5): print(train_set[i]['text'],end="\n\n")
     
 from sklearn.feature_extraction.text import TfidfVectorizer
 
