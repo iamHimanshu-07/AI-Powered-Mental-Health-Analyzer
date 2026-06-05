@@ -51,20 +51,6 @@ This system provides users with insightful assessments, helping them understand 
 
 ---
 
-## 🖼️ Project Preview
-
-<div align="center">
-
-### Home Page
-<img width="850" alt="Home" src="https://via.placeholder.com/900x450.png?text=Add+Home+Page+Screenshot">
-
-### Prediction Result
-<img width="850" alt="Result" src="https://via.placeholder.com/900x450.png?text=Add+Prediction+Screenshot">
-
-</div>
-
----
-
 # 🏗️ System Architecture
 
 ```text
@@ -190,9 +176,6 @@ http://127.0.0.1:5000
 
 <img width="802" height="476" alt="image" src="https://github.com/user-attachments/assets/1508382f-4612-4cd5-99c1-3a529253bafe" />
 
-- F --> G[User Dashboard]
-
-
 ---
 
 # 📊 Model Capabilities
@@ -270,13 +253,8 @@ Create a Pull Request 🚀
 
 ### Full Stack Developer | AI & Machine Learning Enthusiast
 
-
 <a href="https://www.linkedin.com/">
 <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white"/>
-</a>
-
-<a href="mailto:your-email@example.com">
-<img src="https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white"/>
 </a>
 
 </div>
@@ -284,7 +262,5 @@ Create a Pull Request 🚀
 ---
 
 ### 🧠 "Empowering Mental Wellness Through Artificial Intelligence"
-
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:00BFFF,100:6A5ACD&height=120&section=footer"/>
 
 </div>
