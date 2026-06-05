@@ -260,7 +260,8 @@ Create a Pull Request 🚀
 </div>
 
 ---
-
+<div align="center">
+  
 ### 🧠 "Empowering Mental Wellness Through Artificial Intelligence"
 
 </div>
