@@ -4,16 +4,6 @@ https://www.sciencedirect.com/science/article/abs/pii/S0165032724012278
 
 https://arxiv.org/pdf/2401.04655.pdf
 
-If you use our dataset in your research paper, please make sure to cite the following paper:
-
-Rahman, A. B. S., Ta, H. T., Najjar, L., Azadmanesh, A., & Gönül, A. S. (2024). DepressionEmo: A novel dataset for multilabel classification of depression emotions. Journal of Affective Disorders
-
-Use of the DepressionEmo dataset or a part of your whole dataset for developing any web application, mobile app, or commercial tool is strictly prohibited without prior written permission.
-Please contact us at abubakarsiddiqurra@unomaha.edu before initiating any such use.
-
-© 2024 Abu Bakar Siddiqur Rahman. All Rights Reserved.
-
-
 # Dataset
 ## Subsets
 The dataset is divided into 3 subsets:
