@@ -120,13 +120,62 @@ EXAMPLES = [
 # --------------------------------------------------------------------------- #
 # Cached resource loaders
 # --------------------------------------------------------------------------- #
+def _ensure_model_on_disk() -> None:
+    """Download the trained artefacts on first run if they aren't on disk.
+
+    On Streamlit Community Cloud the 268 MB ``mental_health_model.pkl`` is
+    too large to commit, so ``app/models/fetch_model.py`` pulls both
+    ``mental_health_model.pkl`` and ``mlb.pkl`` from ``MODEL_URL`` (env var
+    or Streamlit secret). The fetch only runs when files are missing, so
+    the local dev workflow is unchanged.
+    """
+    if (
+        MODEL_PATH.exists()
+        and MODEL_PATH.stat().st_size > 0
+        and MLB_PATH.exists()
+        and MLB_PATH.stat().st_size > 0
+    ):
+        return
+    # Lazy import so the app can still boot even if the downloader is
+    # broken in some environment — we surface a clear error in that case.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_mp_fetch_model", MODELS_DIR / "fetch_model.py"
+    )
+    if spec is None or spec.loader is None:
+        raise FileNotFoundError(
+            f"Could not locate the model downloader at {MODELS_DIR / 'fetch_model.py'}"
+        )
+    fetch_model = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fetch_model)  # type: ignore[union-attr]
+
+    progress = st.progress(0.0, text="Fetching model on first run…")
+
+    def _cb(done: int, total) -> None:
+        if total and total > 0:
+            progress.progress(min(done / total, 1.0))
+        else:
+            # Indeterminate: just bump to a stable "in-progress" value.
+            progress.progress(0.5)
+
+    try:
+        fetch_model.ensure_model(progress_cb=_cb)
+    except Exception as e:
+        progress.empty()
+        st.error(
+            f"Could not download the trained model: {e}\n\n"
+            "Set the `MODEL_URL` environment variable (or Streamlit secret "
+            "`MODEL_URL`) to the base URL where both `mental_health_model.pkl` "
+            "and `mlb.pkl` are hosted side-by-side.",
+            icon="🚨",
+        )
+        st.stop()
+    progress.empty()
+
+
 @st.cache_resource(show_spinner="Loading primary model...")
 def load_pipeline():
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(
-            f"Trained model not found at {MODEL_PATH}. "
-            "Run `python train_model.py` from the repository root first."
-        )
+    _ensure_model_on_disk()
     return joblib.load(MODEL_PATH)
 
 

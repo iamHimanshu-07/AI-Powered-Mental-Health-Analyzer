@@ -100,7 +100,7 @@ python train_model.py
 
 This produces `app/models/mental_health_model.pkl`, `app/models/mlb.pkl`, and `models/metrics.json`.
 
-> The model artefacts are intentionally **not** committed to the repo — they are large, binary, and easy to regenerate. This keeps the repo light and reproducible.
+> The model artefacts are intentionally **not** committed to the repo — they are large, binary, and easy to regenerate. This keeps the repo light and reproducible. **For deployment, see the *Deploy to Streamlit Community Cloud* section below** — the app downloads the model on first run.
 
 ### 5. Launch the Streamlit app
 
@@ -109,6 +109,70 @@ streamlit run app/app.py
 ```
 
 Then open <http://localhost:8501> in your browser.
+
+---
+
+## ☁️ Deploy to Streamlit Community Cloud
+
+The repo is ready for a one-click deploy to [share.streamlit.io](https://share.streamlit.io). The 268 MB trained model is **not committed** — instead, the app downloads it on first run via `app/models/fetch_model.py`.
+
+### One-time: host the model artefacts
+
+Upload both files side-by-side to a public host that allows direct downloads (Hugging Face Hub, GitHub Releases, S3, etc.):
+
+- `mental_health_model.pkl`  (~268 MB)
+- `mlb.pkl`                  (~644 B)
+
+The default baked-in URL is the Hugging Face repo `iamHimanshu-07/MindPulse.AI` (`resolve/main/<file>`) — replace it if you host elsewhere.
+
+### Deploy steps
+
+1. Push this repository to GitHub (the public one already used for development works fine).
+2. Go to **<https://share.streamlit.io>** and sign in.
+3. Click **“New app”** and fill in:
+   - **Repository:** `iamHimanshu-07/MindPulse.AI`
+   - **Branch:** `main`
+   - **Main file path:** `app/app.py`
+   - **App URL:** *(pick a slug)*
+4. Open **“Advanced settings…”** and configure:
+   - **Python version:** `3.11` (matches `runtime.txt`)
+   - **Secrets:** add one secret if you're hosting the model somewhere other than the default URL:
+     ```toml
+     # .streamlit/secrets.toml  (UI form, not a real file)
+     MODEL_URL = "https://your-host.example.com/path/to/models"
+     ```
+5. Click **Deploy**. The first boot takes ~30 seconds — it shows a progress bar while it downloads `mental_health_model.pkl`. Subsequent visits use the cached copy on the container's ephemeral disk.
+
+### What the cloud build needs
+
+| File | Purpose |
+| --- | --- |
+| `runtime.txt` | Pins Python 3.11 (the only supported Cloud version that has `wordcloud` wheels). |
+| `packages.txt` | Empty / comment-only — all dependencies are pure-Python wheels. |
+| `requirements.txt` | Installs `streamlit`, `scikit-learn`, `wordcloud`, `requests`, etc. |
+| `.streamlit/config.toml` | MindPulse brand theme. |
+| `app/models/fetch_model.py` | Downloads the trained model on first run from `MODEL_URL`. |
+
+### Troubleshooting
+
+- **“Could not download the trained model”** — set `MODEL_URL` in Streamlit Cloud's *Advanced settings → Secrets* to a URL whose directory listing contains both `mental_health_model.pkl` and `mlb.pkl`.
+- **`wordcloud` install fails** — confirm your Cloud Python version is 3.11 (or any of 3.9–3.13, all of which have prebuilt wheels). 3.14 is not yet supported on Cloud.
+- **App restarts and forgets the model** — the Cloud container's disk is ephemeral. The model is re-downloaded on cold start (~30 s). To avoid this, host the model on a low-latency CDN.
+
+### Optional: auto-redeploy on every push
+
+The repo ships with `.github/workflows/streamlit-deploy.yml`. Once you set up the one secret below, every push to `main` (and any manual run from the Actions tab) pings Streamlit Community Cloud and forces an instant rebuild — no more waiting for the platform's debounce.
+
+1. Open your app on **<https://share.streamlit.io>**, click the **⋮** menu next to it, and pick **“Deploy this app”**. Copy the URL it gives you (looks like `https://share.streamlit.io/deploy/<app_id>/<branch>/<main_file>`).
+2. In your GitHub repo, go to **Settings → Secrets and variables → Actions → New repository secret** and create:
+   - **Name:** `STREAMLIT_DEPLOY_URL`
+   - **Value:** the URL from step 1.
+3. Done. Push to `main` and watch the **Actions** tab — the workflow will:
+   - checkout the tree,
+   - syntax-check `app/app.py` and `app/models/fetch_model.py`,
+   - POST to the deploy webhook (the full URL is masked in logs).
+
+The workflow only runs for the upstream `iamHimanshu-07/MindPulse.AI` repo, not forks, so PRs from contributors can't accidentally trigger a redeploy.
 
 ---
 

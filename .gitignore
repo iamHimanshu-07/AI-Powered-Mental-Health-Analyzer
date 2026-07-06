@@ -15,3 +15,7 @@ myenv/
 
 models/
 notebooks/*.pkl
+
+# Streamlit runtime artifacts (machine id, credentials — never commit).
+.streamlit/secrets.toml
+.streamlit/credentials.toml
