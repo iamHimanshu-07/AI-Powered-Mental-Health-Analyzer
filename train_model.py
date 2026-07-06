@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -70,16 +71,8 @@ def load_data() -> pd.DataFrame:
 # --------------------------------------------------------------------------- #
 # Training
 # --------------------------------------------------------------------------- #
-def train(df: pd.DataFrame, threshold: float = 0.4) -> dict:
-    x = df["text"].astype(str).tolist()
-    mlb = MultiLabelBinarizer()
-    y = mlb.fit_transform(df["emotions"].tolist())
-
-    x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=0.2, random_state=42
-    )
-
-    pipeline = Pipeline(
+def _build_rf_pipeline() -> Pipeline:
+    return Pipeline(
         steps=[
             (
                 "tfidf",
@@ -105,19 +98,76 @@ def train(df: pd.DataFrame, threshold: float = 0.4) -> dict:
         ]
     )
 
-    pipeline.fit(x_train, y_train)
 
+def _build_logreg_pipeline() -> Pipeline:
+    """Companion interpretable model. Used only to surface the words that
+    push each label up/down for a given input (coefficient × tfidf score)."""
+    return Pipeline(
+        steps=[
+            (
+                "tfidf",
+                TfidfVectorizer(
+                    ngram_range=(1, 2),
+                    max_features=10_000,
+                    stop_words="english",
+                ),
+            ),
+            (
+                "clf",
+                OneVsRestClassifier(
+                    LogisticRegression(
+                        solver="liblinear",
+                        C=1.0,
+                        max_iter=1000,
+                        random_state=42,
+                    )
+                ),
+            ),
+        ]
+    )
+
+
+def train(df: pd.DataFrame, threshold: float = 0.4) -> dict:
+    x = df["text"].astype(str).tolist()
+    mlb = MultiLabelBinarizer()
+    y = mlb.fit_transform(df["emotions"].tolist())
+
+    x_train, x_test, y_train, y_test = train_test_split(
+        x, y, test_size=0.2, random_state=42
+    )
+
+    # ----- primary model: RandomForest (best F1) -----
+    pipeline = _build_rf_pipeline()
+    pipeline.fit(x_train, y_train)
     proba = pipeline.predict_proba(x_test)
     y_pred = (proba >= threshold).astype(int)
 
+    # ----- companion model: LogisticRegression (interpretable) -----
+    interpretable = _build_logreg_pipeline()
+    interpretable.fit(x_train, y_train)
+    interp_proba = interpretable.predict_proba(x_test)
+    interp_pred = (interp_proba >= threshold).astype(int)
+
     metrics = {
         "threshold": threshold,
-        "hamming_loss": float(hamming_loss(y_test, y_pred)),
-        "accuracy": float(accuracy_score(y_test, y_pred)),
-        "precision_micro": float(precision_score(y_test, y_pred, average="micro", zero_division=0)),
-        "recall_micro": float(recall_score(y_test, y_pred, average="micro", zero_division=0)),
-        "f1_micro": float(f1_score(y_test, y_pred, average="micro", zero_division=0)),
-        "f1_macro": float(f1_score(y_test, y_pred, average="macro", zero_division=0)),
+        "primary_model": "OneVsRest(RandomForest, n=200)",
+        "interpretable_model": "OneVsRest(LogisticRegression, liblinear, C=1.0)",
+        "primary": {
+            "hamming_loss": float(hamming_loss(y_test, y_pred)),
+            "accuracy": float(accuracy_score(y_test, y_pred)),
+            "precision_micro": float(precision_score(y_test, y_pred, average="micro", zero_division=0)),
+            "recall_micro": float(recall_score(y_test, y_pred, average="micro", zero_division=0)),
+            "f1_micro": float(f1_score(y_test, y_pred, average="micro", zero_division=0)),
+            "f1_macro": float(f1_score(y_test, y_pred, average="macro", zero_division=0)),
+        },
+        "interpretable": {
+            "hamming_loss": float(hamming_loss(y_test, interp_pred)),
+            "accuracy": float(accuracy_score(y_test, interp_pred)),
+            "precision_micro": float(precision_score(y_test, interp_pred, average="micro", zero_division=0)),
+            "recall_micro": float(recall_score(y_test, interp_pred, average="micro", zero_division=0)),
+            "f1_micro": float(f1_score(y_test, interp_pred, average="micro", zero_division=0)),
+            "f1_macro": float(f1_score(y_test, interp_pred, average="macro", zero_division=0)),
+        },
         "labels": list(mlb.classes_),
         "n_train": int(len(x_train)),
         "n_test": int(len(x_test)),
@@ -127,6 +177,7 @@ def train(df: pd.DataFrame, threshold: float = 0.4) -> dict:
     }
 
     joblib.dump(pipeline, APP_MODELS / "mental_health_model.pkl")
+    joblib.dump(interpretable, APP_MODELS / "interpretable_model.pkl")
     joblib.dump(mlb, APP_MODELS / "mlb.pkl")
     METRICS_PATH.write_text(json.dumps(metrics, indent=2))
 
@@ -138,12 +189,16 @@ def main() -> None:
     df = load_data()
     print(f"[MindPulse] {len(df):,} examples, {df['emotions'].explode().nunique()} unique emotions")
 
-    print("[MindPulse] Training TF-IDF + OneVsRest(RandomForest) ...")
+    print("[MindPulse] Training TF-IDF + OneVsRest(RandomForest) (primary) ...")
+    print("[MindPulse] Training TF-IDF + OneVsRest(LogisticRegression) (interpretable companion) ...")
     metrics = train(df)
 
-    print("\n=== Test metrics ===")
-    for k in ("hamming_loss", "accuracy", "f1_micro", "f1_macro", "precision_micro", "recall_micro"):
-        print(f"  {k:18s} {metrics[k]:.4f}")
+    print("\n=== Test metrics (primary RF) ===")
+    for k, v in metrics["primary"].items():
+        print(f"  {k:18s} {v:.4f}")
+    print("\n=== Test metrics (interpretable LogReg) ===")
+    for k, v in metrics["interpretable"].items():
+        print(f"  {k:18s} {v:.4f}")
 
     print(f"\n[MindPulse] Saved artefacts to {APP_MODELS}")
     print(f"[MindPulse] Saved metrics    to {METRICS_PATH}")

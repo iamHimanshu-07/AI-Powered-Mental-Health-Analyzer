@@ -1,0 +1,19 @@
+# MindPulse.AI custom Streamlit theme
+# Docs: https://docs.streamlit.io/library/advanced-features/theming
+
+[theme]
+base = "light"
+primaryColor = "#6A0DAD"            # deep purple — brand accent
+backgroundColor = "#F7F5FB"         # very light lavender
+secondaryBackgroundColor = "#EDE6F5" # soft purple-grey for cards/sidebar
+textColor = "#1E1B2E"               # near-black with a hint of purple
+font = "sans serif"
+
+[server]
+headless = true
+runOnSave = false
+fileWatcherType = "none"
+maxUploadSize = 5
+
+[browser]
+gatherUsageStats = false

@@ -20,11 +20,19 @@ MindPulse.AI is an end-to-end NLP project that:
 ## ✨ Features
 
 - **Multi-label classification** — a single text can trigger several emotion labels simultaneously.
+- **Two-model design** — a RandomForest primary (best F1) and a LogisticRegression companion used only for per-word explanations.
+- **Top contributing words** for every prediction — see *which* words pushed a label up, derived from TF-IDF × coefficient.
+- **Color-coded word cloud** of the input text, tinted with the top predicted emotion.
+- **Animated, confidence-coloured emotion cards** (green ≥0.7, amber ≥0.4, red ≥0.2, gray below) with a "high-risk" tag on `suicide intent` / `hopelessness`.
+- **🌙 Dark-mode toggle** in the top bar (CSS variable swap, no full page reload).
+- **Custom Streamlit theme** in `.streamlit/config.toml` (deep purple brand palette).
+- **Loading skeleton** with shimmer animation while the model is running.
+- **6 curated "Try this" examples** in the gallery for instant demos.
 - **Adjustable prediction threshold** in the sidebar — sweep from 0.05 to 0.95.
-- **Per-class probability bar chart** with a colour-coded severity map.
-- **High-risk warning banner** if `suicide intent` or `hopelessness` is detected.
-- **Downloadable text report** of every prediction.
-- **Live model metrics** (F1 micro/macro, precision, recall) shown in the sidebar.
+- **Per-class probability bar chart** coloured by confidence with the threshold line and per-bar value labels.
+- **High-risk warning banner** that escalates to `st.error` if `suicide intent` or `hopelessness` is detected.
+- **Downloadable text report** of every prediction including the contributing words.
+- **Live model metrics** (F1 micro/macro, precision, recall) for both models, shown in the sidebar.
 - **Reproducible training script** (`train_model.py`) — re-train from scratch in one command.
 
 ---
@@ -36,8 +44,11 @@ MindPulse.AI/
 ├── app/
 │   ├── app.py                 # Streamlit front-end
 │   └── models/                # Trained artefacts (created by train_model.py)
-│       ├── mental_health_model.pkl
+│       ├── mental_health_model.pkl    # primary (RandomForest)
+│       ├── interpretable_model.pkl    # companion (LogisticRegression)
 │       └── mlb.pkl
+├── .streamlit/
+│   └── config.toml            # Custom theme (deep purple brand palette)
 ├── DepressionEmo/             # Raw dataset + research scripts
 │   └── Dataset/
 │       ├── train.json
@@ -48,7 +59,7 @@ MindPulse.AI/
 │   └── Multi-label Classifier - Threshold Tuned.ipynb
 ├── models/
 │   └── metrics.json           # Test-set metrics from train_model.py
-├── train_model.py             # Reproducible training script
+├── train_model.py             # Reproducible training script (trains both models)
 ├── requirements.txt
 └── README.md
 ```
@@ -105,14 +116,14 @@ Then open <http://localhost:8501> in your browser.
 
 Test set (20 % hold-out, `random_state=42`):
 
-| Metric | Score |
-| --- | --- |
-| Hamming loss | 0.2442 |
-| Subset accuracy | 0.1267 |
-| F1 (micro) | 0.7584 |
-| F1 (macro) | 0.7069 |
-| Precision (micro) | 0.6944 |
-| Recall (micro) | 0.8354 |
+| Model | F1 (micro) | F1 (macro) | Precision | Recall |
+| --- | ---: | ---: | ---: | ---: |
+| **Primary** — `OneVsRest(RandomForest, n=200)` | 0.7585 | 0.7069 | 0.6945 | 0.8354 |
+| **Interpretable** — `OneVsRest(LogisticRegression, liblinear, C=1.0)` | 0.7635 | 0.6890 | 0.7128 | 0.8218 |
+
+Both pipelines share the same `TfidfVectorizer(ngram_range=(1,2), max_features=10_000, stop_words='english')` and are trained on a concatenation of `train.json + val.json + test.json` (split 80/20).
+
+The RandomForest is used for predictions; the LogisticRegression is used **only** to surface the words that pushed each label up — its coefficients × TF-IDF scores give a faithful "why this prediction" view that RF does not provide directly.
 
 *Baseline only — see the **Future work** section for planned upgrades.*
 
