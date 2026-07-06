@@ -1,267 +1,163 @@
-<div align="center">
+# 🧠 MindPulse.AI — Mental Health Emotion Detector
 
-# 🧠 AI-Powered Mental Health Analyzer
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3+-F7931E?logo=scikitlearn&logoColor=white)](https://scikit-learn.org)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org)
 
-### 🚀 Intelligent Mental Health Assessment Using Artificial Intelligence & Machine Learning
+> **AI-powered, multi-label mental-health emotion detection from free-form text.**
 
-<p align="center">
-  <img src="https://img.shields.io/badge/AI-Powered-blue?style=for-the-badge&logo=openai&logoColor=white" />
-  <img src="https://img.shields.io/badge/Machine-Learning-orange?style=for-the-badge&logo=tensorflow&logoColor=white" />
-  <img src="https://img.shields.io/badge/Python-3.10+-yellow?style=for-the-badge&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/Flask-Web_App-black?style=for-the-badge&logo=flask&logoColor=white" />
-</p>
+MindPulse.AI is an end-to-end NLP project that:
 
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Poppins&weight=600&size=24&pause=1000&color=00BFFF&center=true&vCenter=true&width=800&lines=AI-Powered+Mental+Health+Analyzer;Machine+Learning+for+Mental+Wellness;Predict+Analyze+Improve;Built+with+Python+%26+Flask" />
-</p>
+1. Loads the `DepressionEmo` Reddit dataset (`anger`, `sadness`, `emptiness`, `hopelessness`, `worthlessness`, `loneliness`, `suicide intent`, `brain dysfunction (forget)`).
+2. Trains a **TF-IDF (1-2 grams, 10k features) + OneVsRest(RandomForest)** multi-label classifier.
+3. Serves predictions through an interactive **Streamlit** dashboard with adjustable threshold, per-emotion probability chart, and downloadable report.
 
-</div>
+> ⚠️ **Disclaimer:** This project is for educational and awareness purposes only. It is **not** a substitute for professional medical advice, diagnosis, or treatment. If you or someone you know is in crisis, please contact a qualified mental-health professional or a crisis helpline in your country.
 
 ---
 
-## 🌟 Overview
+## ✨ Features
 
-Mental health is a critical aspect of overall well-being, yet early identification of potential mental health concerns remains a challenge. The **AI-Powered Mental Health Analyzer** leverages **Artificial Intelligence (AI)** and **Machine Learning (ML)** techniques to analyze user inputs and predict potential mental health conditions.
-
-This system provides users with insightful assessments, helping them understand emotional patterns and mental wellness indicators. By combining predictive analytics with a user-friendly interface, the project aims to promote mental health awareness and encourage proactive care.
-
-> ⚠️ This project is intended for educational and awareness purposes only and should not be considered a substitute for professional medical advice.
-
----
-
-## 🎯 Key Features
-
-✨ AI-Based Mental Health Prediction
-
-📊 Interactive Dashboard
-
-🤖 Machine Learning-Powered Analysis
-
-📈 Visual Reports & Insights
-
-🔐 Secure User Data Handling
-
-⚡ Real-Time Predictions
-
-📱 Responsive User Interface
-
-🎨 Modern UI/UX Design
-
-📝 Personalized Recommendations
+- **Multi-label classification** — a single text can trigger several emotion labels simultaneously.
+- **Adjustable prediction threshold** in the sidebar — sweep from 0.05 to 0.95.
+- **Per-class probability bar chart** with a colour-coded severity map.
+- **High-risk warning banner** if `suicide intent` or `hopelessness` is detected.
+- **Downloadable text report** of every prediction.
+- **Live model metrics** (F1 micro/macro, precision, recall) shown in the sidebar.
+- **Reproducible training script** (`train_model.py`) — re-train from scratch in one command.
 
 ---
 
-# 🏗️ System Architecture
+## 🗂 Project structure
 
-```text
-┌──────────────────────┐
-│      User Input      │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│    Flask Web App     │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Data Preprocessing   │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Machine Learning ML  │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Prediction Engine    │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ Results & Insights   │
-└──────────────────────┘
+```
+MindPulse.AI/
+├── app/
+│   ├── app.py                 # Streamlit front-end
+│   └── models/                # Trained artefacts (created by train_model.py)
+│       ├── mental_health_model.pkl
+│       └── mlb.pkl
+├── DepressionEmo/             # Raw dataset + research scripts
+│   └── Dataset/
+│       ├── train.json
+│       ├── val.json
+│       └── test.json
+├── Notebook/
+│   ├── EDA.ipynb
+│   └── Multi-label Classifier - Threshold Tuned.ipynb
+├── models/
+│   └── metrics.json           # Test-set metrics from train_model.py
+├── train_model.py             # Reproducible training script
+├── requirements.txt
+└── README.md
 ```
 
 ---
 
-# 🛠️ Tech Stack
+## 🚀 Quick start
 
-<div align="center">
-
-| Category | Technologies |
-|-----------|-------------|
-| Frontend | HTML5, CSS3, Bootstrap, JavaScript |
-| Backend | Flask, Python |
-| Machine Learning | Scikit-Learn, Pandas, NumPy |
-| Visualization | Matplotlib, Seaborn |
-| Database | SQLite / CSV Dataset |
-| Deployment | GitHub, Render, Railway |
-| Tools | VS Code, Jupyter Notebook, Git |
-
-</div>
-
----
-
-# 🚀 Installation
-
-## Clone Repository
+### 1. Clone & enter
 
 ```bash
-git clone https://github.com/iamHimanshu-07/AI-Powered-Mental-Health-Analyzer.git
+git clone https://github.com/iamHimanshu-07/MindPulse.AI.git
+cd MindPulse.AI
 ```
 
-## Navigate to Project
+### 2. Create a virtual environment
 
 ```bash
-cd AI-Powered-Mental-Health-Analyzer
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+# Linux / macOS
+source .venv/bin/activate
 ```
 
-## Create Virtual Environment
-
-```bash
-python -m venv venv
-```
-
-### Windows
-
-```bash
-venv\Scripts\activate
-```
-
-### Linux / Mac
-
-```bash
-source venv/bin/activate
-```
-
-## Install Dependencies
+### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Run Application
+### 4. Train the model (one-time, ~1 min on CPU)
 
 ```bash
-python app.py
+python train_model.py
 ```
 
-## Open Browser
+This produces `app/models/mental_health_model.pkl`, `app/models/mlb.pkl`, and `models/metrics.json`.
+
+> The model artefacts are intentionally **not** committed to the repo — they are large, binary, and easy to regenerate. This keeps the repo light and reproducible.
+
+### 5. Launch the Streamlit app
 
 ```bash
-http://127.0.0.1:5000
+streamlit run app/app.py
 ```
 
-# 🤖 Machine Learning Workflow
-
-- A[Dataset Collection]--> B[Data Cleaning]
-
-<img width="938" height="480" alt="image" src="https://github.com/user-attachments/assets/5c941731-595e-4082-a0f2-282b873ba0ec" />
-
-- B --> C[Feature Engineering]
-
-<img width="820" height="558" alt="image" src="https://github.com/user-attachments/assets/7aa4f013-f267-4bc7-8633-44a06db7d026" />
-
-- C --> D[Model Training]
-  
-<img width="715" height="516" alt="image" src="https://github.com/user-attachments/assets/577b6925-02f4-4e52-8a6e-2d684ac78c6e" />
-
-- D --> E[Model Evaluation]
-
-<img width="720" height="559" alt="image" src="https://github.com/user-attachments/assets/8ce9f6d0-82d0-46d5-9271-fb943cc4ab02" />
-
-- E --> F[Prediction Generation]
-
-<img width="802" height="476" alt="image" src="https://github.com/user-attachments/assets/1508382f-4612-4cd5-99c1-3a529253bafe" />
+Then open <http://localhost:8501> in your browser.
 
 ---
 
-# 📊 Model Capabilities
+## 📊 Model performance
 
-✅ Stress Detection
+Test set (20 % hold-out, `random_state=42`):
 
-✅ Anxiety Prediction
+| Metric | Score |
+| --- | --- |
+| Hamming loss | 0.2442 |
+| Subset accuracy | 0.1267 |
+| F1 (micro) | 0.7584 |
+| F1 (macro) | 0.7069 |
+| Precision (micro) | 0.6944 |
+| Recall (micro) | 0.8354 |
 
-✅ Emotional Pattern Analysis
-
-✅ Mental Wellness Assessment
-
-✅ Risk Categorization
-
-✅ Personalized Suggestions
-
----
-
-# 🎯 Applications
-
-🏥 Healthcare & Wellness
-
-🎓 Educational Institutions
-
-🏢 Corporate Employee Wellness
-
-👨‍💻 Personal Mental Health Tracking
-
-📚 Research & Analytics
-
-🌐 AI-Based Healthcare Solutions
+*Baseline only — see the **Future work** section for planned upgrades.*
 
 ---
 
-# 🔮 Future Enhancements
+## 🧪 Using the app
 
-- 💬 AI Mental Health Chatbot
-- 🎙️ Voice Emotion Detection
-- 📱 Android & iOS Application
-- ☁️ Cloud Deployment
-- 🧠 Deep Learning Models
-- 📊 Advanced Analytics Dashboard
-- 🌍 Multi-Language Support
-- 🩺 Doctor Consultation Integration
-
----
-
-# 🤝 Contributing
-
-Contributions are welcome!
-
-```bash
-# Fork Repository
-
-# Create Branch
-git checkout -b feature-name
-
-# Commit Changes
-git commit -m "Add feature"
-
-# Push Changes
-git push origin feature-name
-```
-
-Create a Pull Request 🚀
-
+1. Type or paste any text into the **Your text** box.
+2. Adjust the **Prediction threshold** in the sidebar (default 0.40).
+   - Higher threshold → fewer, more confident labels.
+   - Lower threshold → more labels, more false positives.
+3. Click **🔍 Analyze**.
+4. Read the **Predicted emotions**, the **probability bar chart**, and (if relevant) the **high-risk warning**.
+5. Optionally **Download report (.txt)** for the full audit trail.
 
 ---
 
-# 👨‍💻 Developer
+## 🔁 Re-training & experimentation
 
-<div align="center">
+`train_model.py` is the single source of truth for the model. To try a different classifier, edit the `pipeline` definition (e.g. swap `RandomForestClassifier` for `LogisticRegression(solver='liblinear')`) and re-run. Remember:
 
-## Himanshu Singh Yadav
-
-### Full Stack Developer | AI & Machine Learning Enthusiast
-
-<a href="https://www.linkedin.com/">
-<img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white"/>
-</a>
-
-</div>
+- Only estimators with `predict_proba` work with the current Streamlit UI (`RandomForest`, `LogisticRegression`, `GradientBoosting`, …). `LinearSVC` does **not** support `predict_proba` and would need a UI tweak.
 
 ---
-<div align="center">
-  
-### 🧠 "Empowering Mental Wellness Through Artificial Intelligence"
 
-</div>
+## 🛣 Future work
+
+- Replace TF-IDF + RF with a fine-tuned transformer (e.g. `distilroberta-base`) for stronger F1.
+- Add SHAP / LIME explanations so each prediction is interpretable.
+- Persist user history (with consent) for longitudinal trend analysis.
+- Containerise with Docker & deploy to Streamlit Community Cloud.
+- Multi-lingual support beyond English.
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repo.
+2. Create a feature branch: `git checkout -b feat/awesome`.
+3. Commit your changes: `git commit -m "feat: ..."`.
+4. Push: `git push origin feat/awesome`.
+5. Open a Pull Request.
+
+---
+
+## 📄 License
+
+[Apache-2.0](LICENSE)
