@@ -1,9 +1,0 @@
-# System packages installed in the Streamlit Community Cloud image.
-#
-# MindPulse.AI only uses Python wheels (no native compilation needed):
-#   - wordcloud 1.9 ships a manylinux / musllinux wheel for Python 3.9–3.13
-#   - scikit-learn 1.x ships wheels for the same range
-#   - matplotlib 3.x ships wheels for the same range
-#
-# Leave this file present (even if empty) so Streamlit's image builder
-# uses the lean default — adding packages here would bloat the build.
