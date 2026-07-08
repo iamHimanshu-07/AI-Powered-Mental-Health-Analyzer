@@ -540,198 +540,6 @@ def _truncate_text(text: str, limit: int = _REPORT_TEXT_LIMIT) -> str:
     return text[:limit] + f"\n[...truncated, original length {len(text):,} chars...]"
 
 
-def _prob_bar(p: float, width: int = 20) -> str:
-    """Tiny ASCII histogram for the .txt export (e.g. ``████████░░ 0.78``)."""
-    filled = int(round(p * width))
-    return "█" * filled + "░" * (width - filled)
-
-
-def _format_proba_line(emo: str, p: float, *, txt: bool) -> str:
-    """Format a single probability row in either .txt or .md flavour."""
-    if txt:
-        flag = "  ⚠ HIGH RISK" if emo in HIGH_RISK_LABELS else ""
-        return f"  {emo:<28s} {_prob_bar(p)} {p:.4f}{flag}\n"
-    # md: use a unicode block bar so it renders in monospaced viewers.
-    bar = "▰" * int(round(p * 20)) + "▱" * (20 - int(round(p * 20)))
-    badge = " ⚠️ **HIGH RISK**" if emo in HIGH_RISK_LABELS else ""
-    return f"| `{emo}` | `{p:.4f}` | {bar} |{badge}\n"
-
-
-def make_report(
-    text: str,
-    predicted: list[str],
-    proba: np.ndarray,
-    emotions: np.ndarray,
-    contributors: dict[str, list[tuple[str, float]]],
-    *,
-    threshold: float = 0.4,
-    metrics: dict | None = None,
-) -> tuple[str, str]:
-    """Build the report in both .txt and .md flavours.
-
-    Returns ``(txt, md)``. The .txt version is for sharing over chat/email;
-    the .md version renders nicely on GitHub, Notion, Obsidian, etc.
-    """
-    primary = (metrics or {}).get("primary", {}) if metrics else {}
-    interp = (metrics or {}).get("interpretable", {}) if metrics else {}
-    primary_name = (metrics or {}).get("primary_model", "RandomForest") if metrics else "RandomForest"
-    interp_name = (metrics or {}).get("interpretable_model", "LogisticRegression") if metrics else "LogisticRegression"
-    n_train = (metrics or {}).get("n_train", 0) if metrics else 0
-    n_test = (metrics or {}).get("n_test", 0) if metrics else 0
-
-    sorted_pairs = sorted(zip(emotions, proba), key=lambda kv: -float(kv[1]))
-    predicted_set = set(predicted)
-    high_risk = [(emo, float(p)) for emo, p in sorted_pairs if emo in HIGH_RISK_LABELS and p >= threshold]
-    truncated_text = _truncate_text(text)
-
-    # --- plain text version ------------------------------------------------- #
-    t = io.StringIO()
-    t.write("MindPulse.AI — Mental Health Emotion Report\n")
-    t.write("=" * 60 + "\n")
-    t.write(f"Generated:       {datetime.utcnow().isoformat()}Z\n")
-    t.write(f"Threshold:       {threshold:.2f}\n")
-    t.write(f"Primary model:   {primary_name}\n")
-    t.write(f"  F1 (micro)     {primary.get('f1_micro', 0.0):.4f}\n")
-    t.write(f"  F1 (macro)     {primary.get('f1_macro', 0.0):.4f}\n")
-    t.write(f"  Precision      {primary.get('precision_micro', 0.0):.4f}\n")
-    t.write(f"  Recall         {primary.get('recall_micro', 0.0):.4f}\n")
-    t.write(f"Companion model: {interp_name}\n")
-    if n_train:
-        t.write(f"Training set:    {n_train:,} samples  ·  Test set: {n_test:,} samples\n")
-    t.write("\n")
-
-    # High-risk block — surfaced *before* the regular probability list so a
-    # clinician scanning the report sees it immediately.
-    if high_risk:
-        t.write("⚠ HIGH RISK DETECTED ⚠\n")
-        t.write("-" * 60 + "\n")
-        for emo, p in high_risk:
-            t.write(f"  • {emo}  (probability {p:.2%})\n")
-        t.write("\nPlease follow up with the user and consider professional referral.\n\n")
-    elif predicted_set & HIGH_RISK_LABELS:
-        # Predicted set contains a high-risk label but its prob fell just under
-        # the threshold. Still worth a softer note.
-        t.write("(Note: one or more high-risk labels are close to the threshold.\n")
-        t.write(" Review the probability table below.)\n\n")
-
-    t.write("Input text:\n")
-    t.write("-" * 60 + "\n")
-    t.write(truncated_text + "\n\n")
-
-    t.write("Predicted emotions (above threshold):\n")
-    t.write("-" * 60 + "\n")
-    if predicted:
-        t.write("  " + ", ".join(predicted) + "\n")
-    else:
-        t.write("  (none above threshold)\n")
-        t.write("  Consider rephrasing the input or providing more context.\n")
-    t.write("\n")
-
-    t.write("Emotion probabilities (sorted, highest first):\n")
-    t.write("-" * 60 + "\n")
-    for emo, p in sorted_pairs:
-        t.write(_format_proba_line(emo, float(p), txt=True))
-    t.write("\n")
-
-    if contributors:
-        t.write("Top contributing words (interpretable model):\n")
-        t.write("-" * 60 + "\n")
-        for label, words in contributors.items():
-            if label not in predicted_set:
-                continue
-            t.write(f"  {label}:\n")
-            for w, c in words:
-                t.write(f"    {w:<20s} +{c:.4f}\n")
-        t.write(
-            "\nNote: these are TF-IDF × coefficient contributions from the "
-            "interpretable\ncompanion model, not causal explanations.\n\n"
-        )
-
-    t.write("Disclaimer\n")
-    t.write("-" * 60 + "\n")
-    t.write(DISCLAIMER + "\n\n")
-    t.write("Crisis resources\n")
-    t.write("-" * 60 + "\n")
-    t.write(HELPLINE_FOOTER + "\n")
-    t.write(f"\nReport generated by MindPulse.AI · https://github.com/iamHimanshu-07/MindPulse.AI\n")
-
-    # --- markdown version --------------------------------------------------- #
-    m = io.StringIO()
-    m.write("# 🧠 MindPulse.AI — Mental Health Emotion Report\n\n")
-    m.write(f"- **Generated:** {datetime.utcnow().isoformat()}Z\n")
-    m.write(f"- **Threshold:** `{threshold:.2f}`\n")
-    m.write(f"- **Primary model:** `{primary_name}`\n")
-    m.write(f"  - F1 (micro): `{primary.get('f1_micro', 0.0):.4f}`\n")
-    m.write(f"  - F1 (macro): `{primary.get('f1_macro', 0.0):.4f}`\n")
-    m.write(f"  - Precision:  `{primary.get('precision_micro', 0.0):.4f}`\n")
-    m.write(f"  - Recall:     `{primary.get('recall_micro', 0.0):.4f}`\n")
-    m.write(f"- **Companion model:** `{interp_name}`\n")
-    if n_train:
-        m.write(f"- **Training set:** {n_train:,} samples · **Test set:** {n_test:,} samples\n")
-    m.write("\n")
-
-    if high_risk:
-        m.write("> ## ⚠️ HIGH RISK DETECTED ⚠️\n")
-        m.write(">\n")
-        for emo, p in high_risk:
-            m.write(f"> - **{emo}** — probability `{p:.2%}`\n")
-        m.write(">\n")
-        m.write("> Please follow up with the user and consider professional referral.\n\n")
-    elif predicted_set & HIGH_RISK_LABELS:
-        m.write("> _Note: one or more high-risk labels are close to the threshold._\n\n")
-
-    m.write("## Input text\n\n```\n")
-    m.write(truncated_text + "\n```\n\n")
-
-    m.write("## Predicted emotions (above threshold)\n\n")
-    if predicted:
-        m.write(", ".join(f"`{e}`" for e in predicted) + "\n\n")
-    else:
-        m.write("_(none above threshold)_\n\n")
-        m.write("> Consider rephrasing the input or providing more context.\n\n")
-
-    m.write("## Emotion probabilities (sorted, highest first)\n\n")
-    m.write("| Label | Probability | Bar |\n")
-    m.write("|---|---:|---|\n")
-    for emo, p in sorted_pairs:
-        m.write(_format_proba_line(emo, float(p), txt=False))
-    m.write("\n")
-
-    if contributors:
-        m.write("## Top contributing words (interpretable model)\n\n")
-        any_block = False
-        for label, words in contributors.items():
-            if label not in predicted_set:
-                continue
-            any_block = True
-            m.write(f"### {label}\n\n")
-            m.write("| Word | Contribution |\n|---|---:|\n")
-            for w, c in words:
-                m.write(f"| `{w}` | `+{c:.4f}` |\n")
-            m.write("\n")
-        if any_block:
-            m.write(
-                "> _These are TF-IDF × coefficient contributions from the interpretable "
-                "companion model, not causal explanations._\n\n"
-            )
-
-    m.write("## Disclaimer\n\n")
-    m.write(f"> {DISCLAIMER}\n\n")
-    m.write("## Crisis resources\n\n")
-    # Convert the multi-line helpline into a markdown list.
-    for line in HELPLINE_FOOTER.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith("•"):
-            m.write(f"- {line.lstrip('• ')}\n")
-        else:
-            m.write(f"{line}\n")
-    m.write(f"\n---\n*Report generated by [MindPulse.AI](https://github.com/iamHimanshu-07/MindPulse.AI)*\n")
-
-    return t.getvalue(), m.getvalue()
-
-
 # --------------------------------------------------------------------------- #
 # PDF export
 # --------------------------------------------------------------------------- #
@@ -1190,15 +998,6 @@ def main():
 
     # ---------- export ----------
     st.markdown("### 📥 Export")
-    report_txt, report_md = make_report(
-        text_input,
-        predicted,
-        proba,
-        mlb.classes_,
-        contributors,
-        threshold=threshold,
-        metrics=metrics,
-    )
     report_pdf = make_pdf(
         text_input,
         predicted,
@@ -1208,26 +1007,12 @@ def main():
         threshold=threshold,
         metrics=metrics,
     )
-    btn_col1, btn_col2, btn_col3 = st.columns(3)
-    btn_col1.download_button(
-        label="📄 .txt",
-        data=report_txt,
-        file_name="mindpulse_report.txt",
-        mime="text/plain",
-        use_container_width=True,
-    )
-    btn_col2.download_button(
-        label="📝 .md",
-        data=report_md,
-        file_name="mindpulse_report.md",
-        mime="text/markdown",
-        use_container_width=True,
-    )
-    btn_col3.download_button(
-        label="📕 .pdf",
+    st.download_button(
+        label="📕 Download report (.pdf)",
         data=report_pdf,
         file_name="mindpulse_report.pdf",
         mime="application/pdf",
+        type="primary",
         use_container_width=True,
     )
 
