@@ -401,7 +401,7 @@ def render_sidebar(metrics: dict | None) -> dict:
             "intent, brain dysfunction) from free-form text."
         )
         st.warning(
-            "⚠️ For educational & awareness use only. Not a substitute for "
+            "For educational & awareness use only. Not a substitute for "
             "professional medical advice.",
             icon="⚠️",
         )
