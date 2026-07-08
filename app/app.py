@@ -9,6 +9,7 @@ import io
 import json
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import joblib
@@ -619,7 +620,7 @@ def make_pdf(
     pdf.set_text_color(30, 27, 46)    # BRAND text
     pdf.set_font("Helvetica", "", 9)
     pdf.cell(0, 5, _pdf_safe(
-        f"Generated: {datetime.utcnow().isoformat()}Z   |   "
+        f"Generated: {datetime.now(ZoneInfo('Asia/Kolkata')).isoformat()}  |   "
         f"Threshold: {threshold:.2f}"
     ), ln=1)
     pdf.ln(2)
