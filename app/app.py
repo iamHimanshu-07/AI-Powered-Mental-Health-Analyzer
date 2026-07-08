@@ -15,6 +15,7 @@ import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
+from fpdf import FPDF
 
 # --------------------------------------------------------------------------- #
 # Brand palette & label metadata
@@ -732,6 +733,273 @@ def make_report(
 
 
 # --------------------------------------------------------------------------- #
+# PDF export
+# --------------------------------------------------------------------------- #
+# fpdf2 only ships the standard PDF base 14 fonts; Helvetica is one of them
+# and renders the Latin-1 subset, which covers everything in this report
+# (no CJK, no emoji). If we ever need non-Latin glyphs we'd add a TTF via
+# ``pdf.add_font(...)`` here.
+
+_PDF_BAR_WIDTH = 80  # mm; total width of the inline bar in the prob table
+
+
+def _pdf_safe(text: str) -> str:
+    """Replace any character outside Latin-1 with a safe substitute.
+
+    fpdf2's default fonts (Helvetica/Times/Courier) only support Latin-1, so
+    bullets, em-dashes, and arrows have to be substituted or they raise
+    ``UnicodeEncodeError`` when we call ``pdf.cell(...)``. Common offenders:
+    ``•`` ``—`` ``→`` ``≥``.
+    """
+    replacements = {
+        "•": "-",
+        "—": "-",
+        "–": "-",
+        "→": "->",
+        "≥": ">=",
+        "≤": "<=",
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+        "…": "...",
+        "·": "|",
+    }
+    for src, dst in replacements.items():
+        text = text.replace(src, dst)
+    # Final safety net: drop anything still outside Latin-1.
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def _pdf_high_risk_marker(label: str) -> str:
+    """Inline marker for the prob table; uses ASCII so fpdf2 is happy."""
+    return " [HIGH RISK]" if label in HIGH_RISK_LABELS else ""
+
+
+def make_pdf(
+    text: str,
+    predicted: list[str],
+    proba: np.ndarray,
+    emotions: np.ndarray,
+    contributors: dict[str, list[tuple[str, float]]],
+    *,
+    threshold: float = 0.4,
+    metrics: dict | None = None,
+) -> bytes:
+    """Render the report as a PDF using fpdf2. Returns the raw PDF bytes."""
+    primary = (metrics or {}).get("primary", {}) if metrics else {}
+    interp = (metrics or {}).get("interpretable", {}) if metrics else {}
+    primary_name = (metrics or {}).get("primary_model", "RandomForest") if metrics else "RandomForest"
+    interp_name = (metrics or {}).get("interpretable_model", "LogisticRegression") if metrics else "LogisticRegression"
+    n_train = (metrics or {}).get("n_train", 0) if metrics else 0
+    n_test = (metrics or {}).get("n_test", 0) if metrics else 0
+
+    sorted_pairs = sorted(zip(emotions, proba), key=lambda kv: -float(kv[1]))
+    predicted_set = set(predicted)
+    high_risk = [(emo, float(p)) for emo, p in sorted_pairs if emo in HIGH_RISK_LABELS and p >= threshold]
+    truncated_text = _truncate_text(text)
+
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_margins(15, 15, 15)
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # --- Title ----------------------------------------------------------- #
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_text_color(106, 13, 173)  # BRAND primary
+    pdf.cell(0, 9, "MindPulse.AI - Mental Health Emotion Report", ln=1)
+    pdf.set_text_color(30, 27, 46)    # BRAND text
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 5, _pdf_safe(
+        f"Generated: {datetime.utcnow().isoformat()}Z   |   "
+        f"Threshold: {threshold:.2f}"
+    ), ln=1)
+    pdf.ln(2)
+
+    # --- Model metadata box --------------------------------------------- #
+    pdf.set_draw_color(224, 216, 236)
+    pdf.set_fill_color(247, 245, 251)  # BRAND surface
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 6, "  Model Information", fill=True, ln=1)
+    pdf.set_font("Helvetica", "", 9)
+    meta_lines = [
+        f"Primary model:    {_pdf_safe(primary_name)}",
+        f"  F1 (micro)      {primary.get('f1_micro', 0.0):.4f}",
+        f"  F1 (macro)      {primary.get('f1_macro', 0.0):.4f}",
+        f"  Precision       {primary.get('precision_micro', 0.0):.4f}",
+        f"  Recall          {primary.get('recall_micro', 0.0):.4f}",
+        f"Companion model:  {_pdf_safe(interp_name)}",
+    ]
+    if n_train:
+        meta_lines.append(f"Training set:     {n_train:,} samples  |  Test set: {n_test:,} samples")
+    for line in meta_lines:
+        pdf.cell(0, 5, _pdf_safe("  " + line), ln=1)
+    pdf.ln(3)
+
+    # --- High-risk block (prominent, before the rest) ------------------- #
+    if high_risk:
+        pdf.set_fill_color(214, 39, 40)  # BRAND danger
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.cell(0, 8, "  !  HIGH RISK DETECTED", fill=True, ln=1)
+        pdf.set_text_color(30, 27, 46)
+        pdf.set_font("Helvetica", "", 10)
+        for emo, p in high_risk:
+            pdf.cell(0, 6, _pdf_safe(f"   - {emo}  (probability {p:.2%})"), ln=1)
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.cell(
+            0, 5,
+            "   Please follow up with the user and consider professional referral.",
+            ln=1,
+        )
+        pdf.set_font("Helvetica", "", 10)
+        pdf.ln(3)
+    elif predicted_set & HIGH_RISK_LABELS:
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.cell(
+            0, 5,
+            _pdf_safe(
+                "Note: one or more high-risk labels are close to the threshold. "
+                "Review the probability table below."
+            ),
+            ln=1,
+        )
+        pdf.ln(2)
+
+    # --- Input text ------------------------------------------------------ #
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, "Input Text", ln=1)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_fill_color(247, 245, 251)
+    pdf.multi_cell(0, 5, _pdf_safe(truncated_text), fill=True)
+    pdf.ln(2)
+
+    # --- Predicted emotions --------------------------------------------- #
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, "Predicted Emotions (above threshold)", ln=1)
+    pdf.set_font("Helvetica", "", 10)
+    if predicted:
+        pdf.multi_cell(0, 5, _pdf_safe(", ".join(predicted)))
+    else:
+        pdf.set_text_color(107, 101, 133)
+        pdf.cell(0, 5, "(none above threshold)", ln=1)
+        pdf.cell(
+            0, 5,
+            _pdf_safe("Consider rephrasing the input or providing more context."),
+            ln=1,
+        )
+        pdf.set_text_color(30, 27, 46)
+    pdf.ln(2)
+
+    # --- Probability table with bars ------------------------------------ #
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, "Emotion Probabilities (sorted, highest first)", ln=1)
+    pdf.set_font("Helvetica", "", 9)
+
+    label_w = 60
+    prob_w = 22
+    bar_total_w = _PDF_BAR_WIDTH
+    bar_x = 15 + label_w + prob_w
+
+    pdf.set_draw_color(224, 216, 236)
+    pdf.set_fill_color(237, 230, 245)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(label_w, 6, " Label", border=0, fill=True)
+    pdf.cell(prob_w, 6, " Probability", border=0, fill=True, align="R")
+    pdf.cell(bar_total_w, 6, "  Confidence", border=0, fill=True, ln=1)
+
+    pdf.set_font("Helvetica", "", 9)
+    for emo, p in sorted_pairs:
+        emo_s = _pdf_safe(emo)
+        marker = _pdf_high_risk_marker(emo)
+        is_risk = bool(marker)
+        if is_risk:
+            pdf.set_text_color(214, 39, 40)
+        else:
+            pdf.set_text_color(30, 27, 46)
+
+        pdf.cell(label_w, 6, f"  {emo_s}{marker}", border=0)
+        pdf.cell(prob_w, 6, f"{float(p):.4f}", border=0, align="R")
+
+        # Filled portion of the bar.
+        filled = max(0.0, min(1.0, float(p)))
+        if is_risk:
+            pdf.set_fill_color(214, 39, 40)
+        elif filled >= 0.70:
+            pdf.set_fill_color(44, 160, 44)
+        elif filled >= 0.40:
+            pdf.set_fill_color(232, 163, 61)
+        else:
+            pdf.set_fill_color(200, 195, 210)
+        if filled > 0:
+            pdf.cell(filled * bar_total_w, 6, "", border=0, fill=True)
+        if filled < 1.0:
+            pdf.cell((1.0 - filled) * bar_total_w, 6, "", border=0)
+        pdf.ln()
+
+    pdf.set_text_color(30, 27, 46)
+    pdf.ln(3)
+
+    # --- Contributors ---------------------------------------------------- #
+    if contributors:
+        rendered = False
+        for label, words in contributors.items():
+            if label not in predicted_set or not words:
+                continue
+            if not rendered:
+                pdf.set_font("Helvetica", "B", 12)
+                pdf.cell(0, 6, "Top Contributing Words (interpretable model)", ln=1)
+                pdf.set_font("Helvetica", "", 9)
+                rendered = True
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 5, _pdf_safe(label), ln=1)
+            pdf.set_font("Helvetica", "", 9)
+            for w, c in words:
+                pdf.cell(0, 5, _pdf_safe(f"    {w:<22s}  +{c:.4f}"), ln=1)
+        if rendered:
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.multi_cell(
+                0, 4,
+                _pdf_safe(
+                    "These are TF-IDF x coefficient contributions from the "
+                    "interpretable companion model, not causal explanations."
+                ),
+            )
+            pdf.ln(2)
+
+    # --- Disclaimer ------------------------------------------------------ #
+    pdf.set_draw_color(214, 39, 40)
+    pdf.set_line_width(0.4)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 5, "Disclaimer", ln=1)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.multi_cell(0, 4.5, _pdf_safe(DISCLAIMER))
+    pdf.ln(2)
+
+    # --- Helpline footer ------------------------------------------------- #
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 5, "Crisis Resources", ln=1)
+    pdf.set_font("Helvetica", "", 9)
+    for line in HELPLINE_FOOTER.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        pdf.cell(0, 4.5, _pdf_safe("  " + line.lstrip("• ")), ln=1)
+
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(107, 101, 133)
+    pdf.cell(0, 4, "Report generated by MindPulse.AI - https://github.com/iamHimanshu-07/MindPulse.AI", ln=1)
+
+    # fpdf2.dest returns a bytearray on some versions and bytes on others;
+    # ``bytes()`` handles both.
+    out = pdf.output()
+    return bytes(out)
+
+
+# --------------------------------------------------------------------------- #
 # Animated emotion cards
 # --------------------------------------------------------------------------- #
 def render_emotion_cards(predicted: list[str], proba: np.ndarray, mlb) -> str:
@@ -931,19 +1199,35 @@ def main():
         threshold=threshold,
         metrics=metrics,
     )
-    btn_col1, btn_col2 = st.columns(2)
+    report_pdf = make_pdf(
+        text_input,
+        predicted,
+        proba,
+        mlb.classes_,
+        contributors,
+        threshold=threshold,
+        metrics=metrics,
+    )
+    btn_col1, btn_col2, btn_col3 = st.columns(3)
     btn_col1.download_button(
-        label="📄 Download report (.txt)",
+        label="📄 .txt",
         data=report_txt,
         file_name="mindpulse_report.txt",
         mime="text/plain",
         use_container_width=True,
     )
     btn_col2.download_button(
-        label="📝 Download report (.md)",
+        label="📝 .md",
         data=report_md,
         file_name="mindpulse_report.md",
         mime="text/markdown",
+        use_container_width=True,
+    )
+    btn_col3.download_button(
+        label="📕 .pdf",
+        data=report_pdf,
+        file_name="mindpulse_report.pdf",
+        mime="application/pdf",
         use_container_width=True,
     )
 

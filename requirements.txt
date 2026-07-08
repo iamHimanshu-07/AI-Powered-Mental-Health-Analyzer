@@ -13,3 +13,6 @@ requests>=2.31,<3.0  # used by app/models/fetch_model.py to download artefacts o
 # NLP
 nltk>=3.8,<4.0
 wordcloud>=1.9,<2.0
+
+# PDF export
+fpdf2>=2.7.0,<3.0
