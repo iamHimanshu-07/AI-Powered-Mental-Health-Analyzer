@@ -17,26 +17,6 @@ import numpy as np
 import streamlit as st
 
 # --------------------------------------------------------------------------- #
-# Page config (must be the first Streamlit call)
-# --------------------------------------------------------------------------- #
-st.set_page_config(
-    page_title="MindPulse.AI — Mental Health Emotion Detector",
-    page_icon="🧠",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-# --------------------------------------------------------------------------- #
-# Paths
-# --------------------------------------------------------------------------- #
-APP_DIR = Path(__file__).resolve().parent
-MODELS_DIR = APP_DIR / "models"
-MODEL_PATH = MODELS_DIR / "mental_health_model.pkl"
-INTERP_PATH = MODELS_DIR / "interpretable_model.pkl"
-MLB_PATH = MODELS_DIR / "mlb.pkl"
-METRICS_PATH = APP_DIR.parent / "models" / "metrics.json"
-
-# --------------------------------------------------------------------------- #
 # Brand palette & label metadata
 # --------------------------------------------------------------------------- #
 BRAND = {
@@ -60,6 +40,25 @@ SEVERITY_COLORS = {
     "brain dysfunction (forget)": "#2CA02C",
 }
 HIGH_RISK_LABELS = {"suicide intent", "hopelessness"}
+
+# --------------------------------------------------------------------------- #
+# Page config (must be the first Streamlit call)
+# --------------------------------------------------------------------------- #
+st.set_page_config(
+    page_title="MindPulse.AI — Mental Health Emotion Detector",
+    page_icon="🧠",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+# --------------------------------------------------------------------------- #
+# Paths
+# --------------------------------------------------------------------------- #
+APP_DIR = Path(__file__).resolve().parent
+MODELS_DIR = APP_DIR / "models"
+MODEL_PATH = MODELS_DIR / "mental_health_model.pkl"
+INTERP_PATH = MODELS_DIR / "interpretable_model.pkl"
+MLB_PATH = MODELS_DIR / "mlb.pkl"
+METRICS_PATH = APP_DIR.parent / "models" / "metrics.json"
 
 
 def confidence_color(prob: float) -> str:
@@ -193,97 +192,74 @@ def load_mlb():
 
 @st.cache_data
 def load_metrics():
+    """Read ``models/metrics.json`` and normalise to the nested schema.
+
+    The current ``train_model.py`` writes a nested dict with ``primary`` and
+    ``interpretable`` sub-dicts (one per trained model) plus top-level
+    ``n_train``, ``n_test``, ``labels``, ``threshold``. Older training runs
+    (and a stale ``metrics.json`` on disk) wrote a *flat* dict where the
+    primary model's metrics sat at the top level. The sidebar uses the
+    nested form, so we normalise here so a fresh deploy works even if the
+    metrics file is from a previous trainer.
+    """
     if not METRICS_PATH.exists():
         return None
-    return json.loads(METRICS_PATH.read_text())
+    raw = json.loads(METRICS_PATH.read_text())
 
+    # Already in the new nested format — pass through.
+    if isinstance(raw, dict) and "primary" in raw and isinstance(raw["primary"], dict):
+        return raw
 
-# --------------------------------------------------------------------------- #
-# Word-cloud + theme CSS
-# --------------------------------------------------------------------------- #
-def _wordcloud_html(text: str, emotions_present: list[str], dark: bool) -> str:
-    """Build a colour-coded HTML 'word cloud' that highlights words associated
-    with the emotions predicted above the threshold. Falls back to a simple
-    frequency list if wordcloud lib isn't available."""
-    from collections import Counter
-    import re
-
-    stop = {
-        "the", "a", "an", "and", "or", "but", "is", "are", "was", "were", "i",
-        "you", "he", "she", "it", "we", "they", "to", "of", "in", "on", "for",
-        "with", "at", "by", "from", "as", "this", "that", "these", "those",
-        "be", "been", "have", "has", "had", "do", "does", "did", "will",
-        "would", "could", "should", "may", "might", "can", "my", "your",
-        "me", "him", "her", "us", "them", "so", "if", "not", "no", "yes",
-        "am", "than", "then", "just", "about", "what", "how", "when", "where",
-        "why", "who", "which", "all", "any", "some", "more", "most", "very",
-        "too", "also", "into", "out", "up", "down", "over", "under", "i'm",
-        "im", "dont", "don't", "cant", "can't", "its", "it's",
-    }
-    tokens = re.findall(r"[a-zA-Z']{3,}", text.lower())
-    tokens = [t for t in tokens if t not in stop]
-    counts = Counter(tokens).most_common(20)
-    if not counts:
-        return "<p style='opacity:.6'>Not enough words to render a cloud.</p>"
-
-    bg = "#1E1B2E" if dark else "#F7F5FB"
-    fg = "#F2EEFA" if dark else "#1E1B2E"
-    max_count = counts[0][1]
-    chips = []
-    for word, c in counts:
-        size = 0.9 + 2.4 * (c / max_count)
-        # Tint the chip with the first predicted emotion's colour, otherwise brand.
-        if emotions_present:
-            base = SEVERITY_COLORS.get(emotions_present[0], BRAND["primary"])
-        else:
-            base = BRAND["primary_light"]
-        chips.append(
-            f"<span style='display:inline-block;margin:4px 6px;padding:4px 10px;"
-            f"border-radius:14px;background:{base}22;color:{base};"
-            f"border:1px solid {base}55;font-size:{size:.2f}em;'>"
-            f"{word}<span style='opacity:.55;font-size:.7em;margin-left:6px'>×{c}</span></span>"
-        )
-    return (
-        f"<div style='background:{bg};color:{fg};padding:14px;border-radius:10px;"
-        f"border:1px solid {BRAND['surface_alt']};line-height:1.8;'>"
-        + "".join(chips)
-        + "</div>"
+    # Old flat format: {f1_micro, f1_macro, ...}. Lift the RF (primary) metrics
+    # into the ``primary`` sub-dict the UI expects. ``interpretable`` stays
+    # missing so the sidebar just skips the second-model block.
+    flat_keys = (
+        "hamming_loss", "accuracy", "precision_micro", "recall_micro",
+        "f1_micro", "f1_macro",
     )
+    primary = {k: float(raw[k]) for k in flat_keys if k in raw}
+    if not primary:
+        return None
+    return {
+        "primary_model": raw.get("primary_model", "OneVsRest(RandomForest)"),
+        "interpretable_model": raw.get("interpretable_model", "OneVsRest(LogisticRegression)"),
+        "primary": primary,
+        "labels": raw.get("labels", []),
+        "n_train": int(raw.get("n_train", 0)),
+        "n_test": int(raw.get("n_test", 0)),
+        "threshold": float(raw.get("threshold", 0.4)),
+    }
 
 
 # --------------------------------------------------------------------------- #
 # Skeleton + animation CSS
 # --------------------------------------------------------------------------- #
-def _inject_css(dark: bool) -> None:
-    bg = "#15131F" if dark else BRAND["surface"]
-    card_bg = "#221C30" if dark else "#FFFFFF"
-    text = "#F2EEFA" if dark else BRAND["text"]
-    muted = "#A39DBA" if dark else BRAND["muted"]
-    sidebar_bg = "#1B1726" if dark else BRAND["surface_alt"]
-    border = "#2E2640" if dark else "#E0D8EC"
+def _inject_css() -> None:
+    """Inject the small CSS overlay used by the custom HTML we render.
+
+    The app is light-theme only — colours come straight from ``BRAND`` and
+    there's no toggle. The overlay is intentionally scoped to our own
+    ``.mp-*`` classes so it doesn't fight Streamlit's stylesheet.
+    """
+    card_bg = "#FFFFFF"
+    text = BRAND["text"]
+    muted = BRAND["muted"]
+    border = "#E0D8EC"
+    surface_alt = BRAND["surface_alt"]
 
     css = f"""
     <style>
-    /* ---------- page-level palette ---------- */
-    .stApp {{ background:{bg}; color:{text}; }}
-    section[data-testid="stSidebar"] > div {{ background:{sidebar_bg}; }}
-    .stMarkdown, .stText, p, label, span {{ color:{text}; }}
-    .stCaption, small {{ color:{muted} !important; }}
-    hr {{ border-color:{border} !important; }}
-
-    /* ---------- animated emotion card ---------- */
-    @keyframes mpSlideIn {{
-        from {{ opacity:0; transform: translateY(8px) scale(.97); }}
-        to   {{ opacity:1; transform: translateY(0)   scale(1); }}
-    }}
+    /* ---------- custom emotion card ---------- */
     .mp-emotion-card {{
-        animation: mpSlideIn .45s ease-out both;
         background:{card_bg};
+        color:{text};
+        border:1px solid {border};
+        border-left:4px solid var(--mp-color, {BRAND['primary']});
         border-radius:10px;
         padding:10px 14px;
-        border-left:4px solid var(--mp-color, {BRAND['primary']});
-        box-shadow: 0 1px 2px rgba(0,0,0,.04);
         margin-bottom:6px;
+        box-shadow: 0 1px 2px rgba(0,0,0,.04);
+        animation: mpSlideIn .45s ease-out both;
     }}
     .mp-emotion-card .mp-label {{ font-weight:600; color:{text}; }}
     .mp-emotion-card .mp-prob  {{ color:{muted}; font-size:.85em; }}
@@ -293,13 +269,41 @@ def _inject_css(dark: bool) -> None:
         letter-spacing:.04em; text-transform:uppercase;
     }}
 
+    /* ---------- contributor block ---------- */
+    .mp-contrib {{
+        background:{surface_alt};
+        color:{text};
+        border:1px solid {border};
+        border-radius:10px;
+        padding:10px 12px;
+    }}
+    .mp-contrib-title {{ font-weight:600; margin-bottom:6px; color:{text}; }}
+    .mp-contrib-label {{ color:{muted}; font-size:.85em; margin-bottom:2px; }}
+    .mp-contrib-chip {{
+        display:inline-block;
+        margin:2px 4px;
+        padding:2px 8px;
+        border-radius:10px;
+        font-size:.85em;
+    }}
+    .mp-contrib-chip .mp-contrib-score {{
+        opacity:.85;
+        color:#ffffff;
+    }}
+
+    /* ---------- animated emotion card entrance ---------- */
+    @keyframes mpSlideIn {{
+        from {{ opacity:0; transform: translateY(8px) scale(.97); }}
+        to   {{ opacity:1; transform: translateY(0)   scale(1); }}
+    }}
+
     /* ---------- loading skeleton ---------- */
     @keyframes mpShimmer {{
         0%   {{ background-position: -400px 0; }}
         100% {{ background-position: 400px 0; }}
     }}
     .mp-skel {{
-        background: linear-gradient(90deg, {border} 0%, {sidebar_bg} 50%, {border} 100%);
+        background: linear-gradient(90deg, {border} 0%, {surface_alt} 50%, {border} 100%);
         background-size: 800px 100%;
         animation: mpShimmer 1.4s infinite linear;
         border-radius:8px;
@@ -308,20 +312,6 @@ def _inject_css(dark: bool) -> None:
     }}
     .mp-skel-row {{ display:flex; gap:10px; margin:10px 0; }}
     .mp-skel-row > div {{ flex:1; height:60px; }}
-
-    /* ---------- primary button ---------- */
-    .stButton > button[kind="primary"] {{
-        background:{BRAND['primary']};
-        color:#fff; border:none; font-weight:600;
-    }}
-    .stButton > button[kind="primary"]:hover {{ filter:brightness(1.08); }}
-
-    /* ---------- metric cards ---------- */
-    [data-testid="stMetric"] {{
-        background:{card_bg};
-        border:1px solid {border};
-        border-radius:10px; padding:10px 12px;
-    }}
 
     /* ---------- example gallery buttons ---------- */
     .mp-ex {{
@@ -356,7 +346,7 @@ def _skeleton(n_cards: int = 3) -> str:
 # --------------------------------------------------------------------------- #
 # Sidebar
 # --------------------------------------------------------------------------- #
-def render_sidebar(metrics: dict | None, dark: bool) -> dict:
+def render_sidebar(metrics: dict | None) -> dict:
     with st.sidebar:
         st.markdown("## 🧠 MindPulse.AI")
         st.caption("AI-powered multi-label mental-health emotion detector")
@@ -372,29 +362,31 @@ def render_sidebar(metrics: dict | None, dark: bool) -> dict:
             key="threshold",
             help="Probability above which a label is treated as predicted.",
         )
-        show_wordcloud = st.checkbox("Show color-coded word cloud", value=True)
         show_explanations = st.checkbox("Show top contributing words", value=True)
         show_probs_table = st.checkbox("Show full probability table", value=False)
         show_metrics = st.checkbox("Show model metrics", value=True)
         st.markdown("---")
 
-        if metrics:
+        primary = metrics.get("primary") or {}
+        interp = metrics.get("interpretable") or {}
+
+        if metrics and primary:
             with st.expander("📊 Model metrics", expanded=show_metrics):
                 st.caption(f"**Primary** · {metrics.get('primary_model', 'RF')}")
                 m1, m2 = st.columns(2)
-                m1.metric("F1 (micro)", f"{metrics['primary']['f1_micro']:.3f}")
-                m2.metric("F1 (macro)", f"{metrics['primary']['f1_macro']:.3f}")
-                m1.metric("Precision", f"{metrics['primary']['precision_micro']:.3f}")
-                m2.metric("Recall", f"{metrics['primary']['recall_micro']:.3f}")
-                if "interpretable" in metrics:
+                m1.metric("F1 (micro)",   f"{primary.get('f1_micro', 0.0):.3f}")
+                m2.metric("F1 (macro)",   f"{primary.get('f1_macro', 0.0):.3f}")
+                m1.metric("Precision",    f"{primary.get('precision_micro', 0.0):.3f}")
+                m2.metric("Recall",       f"{primary.get('recall_micro', 0.0):.3f}")
+                if interp:
                     st.caption(f"**Interpretable** · {metrics.get('interpretable_model', 'LogReg')}")
                     m3, m4 = st.columns(2)
-                    m3.metric("F1 (micro)", f"{metrics['interpretable']['f1_micro']:.3f}")
-                    m4.metric("F1 (macro)", f"{metrics['interpretable']['f1_macro']:.3f}")
+                    m3.metric("F1 (micro)", f"{interp.get('f1_micro', 0.0):.3f}")
+                    m4.metric("F1 (macro)", f"{interp.get('f1_macro', 0.0):.3f}")
                 st.caption(
-                    f"Trained on {metrics['n_train']:,} samples · "
-                    f"evaluated on {metrics['n_test']:,} · "
-                    f"{len(metrics['labels'])} labels"
+                    f"Trained on {metrics.get('n_train', 0):,} samples · "
+                    f"evaluated on {metrics.get('n_test', 0):,} · "
+                    f"{len(metrics.get('labels', []))} labels"
                 )
 
         st.markdown("---")
@@ -412,7 +404,6 @@ def render_sidebar(metrics: dict | None, dark: bool) -> dict:
 
     return {
         "threshold": threshold,
-        "show_wordcloud": show_wordcloud,
         "show_explanations": show_explanations,
         "show_probs_table": show_probs_table,
     }
@@ -471,7 +462,7 @@ def top_contributors(interpretable, mlb, text: str, top_k: int = 5) -> dict[str,
 # --------------------------------------------------------------------------- #
 # Visualisation
 # --------------------------------------------------------------------------- #
-def render_chart(emotions: np.ndarray, proba: np.ndarray, threshold: float, dark: bool):
+def render_chart(emotions: np.ndarray, proba: np.ndarray, threshold: float):
     order = np.argsort(proba)
     emotions_sorted = emotions[order]
     proba_sorted = proba[order]
@@ -481,9 +472,9 @@ def render_chart(emotions: np.ndarray, proba: np.ndarray, threshold: float, dark
         else SEVERITY_COLORS.get(label, "#BDBDBD")
         for label, p in zip(emotions_sorted, proba_sorted)
     ]
-    bg = "#15131F" if dark else "#FFFFFF"
-    fg = "#F2EEFA" if dark else "#1E1B2E"
-    grid_c = "#2E2640" if dark else "#E0D8EC"
+    bg = "#FFFFFF"
+    fg = BRAND["text"]
+    grid_c = "#E0D8EC"
 
     fig, ax = plt.subplots(figsize=(8, max(3, 0.45 * len(emotions))))
     fig.patch.set_facecolor(bg)
@@ -565,37 +556,33 @@ def render_emotion_cards(predicted: list[str], proba: np.ndarray, mlb) -> str:
     return "\n".join(cards)
 
 
-def render_contributors(contributors: dict[str, list[tuple[str, float]]], predicted: list[str], dark: bool) -> str:
+def render_contributors(contributors: dict[str, list[tuple[str, float]]], predicted: list[str]) -> str:
     if not contributors or not predicted:
         return ""
-    bg = "#1B1726" if dark else "#FFFFFF"
-    border = "#2E2640" if dark else "#E0D8EC"
-    text = "#F2EEFA" if dark else "#1E1B2E"
-    muted = "#A39DBA" if dark else "#6B6585"
     rows = []
     for label in predicted:
         words = contributors.get(label, [])
         if not words:
             continue
+        accent = SEVERITY_COLORS.get(label, BRAND["primary"])
         chips = " ".join(
-            f"<span style='display:inline-block;margin:2px 4px;padding:2px 8px;"
-            f"border-radius:10px;background:{SEVERITY_COLORS.get(label, BRAND['primary'])}22;"
-            f"color:{SEVERITY_COLORS.get(label, BRAND['primary'])};"
-            f"border:1px solid {SEVERITY_COLORS.get(label, BRAND['primary'])}55;"
-            f"font-size:.85em;'>{w} <span style='opacity:.6'>+{c:.2f}</span></span>"
+            f"<span class='mp-contrib-chip' "
+            f"style='background:{accent};color:#ffffff;"
+            f"border:1px solid {accent};'>"
+            f"{w} <span class='mp-contrib-score' "
+            f"style='color:rgba(255,255,255,.85);'>+{c:.2f}</span></span>"
             for w, c in words
         )
         rows.append(
             f"<div style='margin:6px 0;'>"
-            f"<div style='color:{muted};font-size:.85em;margin-bottom:2px'>{label}</div>"
+            f"<div class='mp-contrib-label'>{label}</div>"
             f"<div>{chips}</div></div>"
         )
     if not rows:
         return ""
     return (
-        f"<div style='background:{bg};border:1px solid {border};border-radius:10px;"
-        f"padding:10px 12px;color:{text};'>"
-        f"<div style='font-weight:600;margin-bottom:6px'>🧩 Top contributing words</div>"
+        "<div class='mp-contrib'>"
+        "<div class='mp-contrib-title'>🧩 Top contributing words</div>"
         + "".join(rows)
         + "</div>"
     )
@@ -608,8 +595,6 @@ def main():
     metrics = load_metrics()
 
     # ---------- session-state defaults ----------
-    if "dark_mode" not in st.session_state:
-        st.session_state.dark_mode = False
     if "text_input_value" not in st.session_state:
         st.session_state.text_input_value = (
             "I feel empty inside, like nothing matters anymore. I can't focus on anything "
@@ -619,19 +604,14 @@ def main():
     if "show_skeleton" not in st.session_state:
         st.session_state.show_skeleton = False
 
-    settings = render_sidebar(metrics, st.session_state.dark_mode)
-    _inject_css(st.session_state.dark_mode)
+    # Inject the small CSS overlay used by the custom HTML blocks (emotion
+    # cards, contributor chips) so they pick up the brand palette and stay
+    # readable against Streamlit's default light background.
+    _inject_css()
 
-    # ---------- top bar: title + dark-mode toggle ----------
-    title_col, toggle_col = st.columns([0.85, 0.15])
-    with title_col:
-        st.title("🧠 Mental Health Emotion Detector")
-    with toggle_col:
-        st.write("")  # vertical alignment nudge
-        label = "☀️ Light" if st.session_state.dark_mode else "🌙 Dark"
-        if st.button(label, use_container_width=True, key="dark_toggle"):
-            st.session_state.dark_mode = not st.session_state.dark_mode
-            st.rerun()
+    settings = render_sidebar(metrics)
+
+    st.title("🧠 Mental Health Emotion Detector")
 
     st.write(
         "Type or paste any text — a journal entry, a message, a thought — "
@@ -705,18 +685,9 @@ def main():
 
     # ---------- probability chart ----------
     st.markdown("### 📊 Probability breakdown")
-    fig = render_chart(mlb.classes_, proba, threshold, st.session_state.dark_mode)
+    fig = render_chart(mlb.classes_, proba, threshold)
     st.pyplot(fig)
     plt.close(fig)
-
-    # ---------- color-coded word cloud ----------
-    if settings["show_wordcloud"]:
-        st.markdown("### ☁️ Color-coded word cloud")
-        st.caption("Word chips sized by frequency, tinted with the top predicted emotion.")
-        st.markdown(
-            _wordcloud_html(text_input, predicted, st.session_state.dark_mode),
-            unsafe_allow_html=True,
-        )
 
     # ---------- top contributing words (interpretable model) ----------
     if settings["show_explanations"]:
@@ -725,7 +696,7 @@ def main():
             "Words from your text that pushed each label up, derived from "
             "a companion Logistic Regression model (TF-IDF × coefficient)."
         )
-        contrib_html = render_contributors(contributors, predicted, st.session_state.dark_mode)
+        contrib_html = render_contributors(contributors, predicted)
         if contrib_html:
             st.markdown(contrib_html, unsafe_allow_html=True)
         else:

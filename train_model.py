@@ -127,6 +127,15 @@ def _build_logreg_pipeline() -> Pipeline:
     )
 
 
+def _safe_predict_proba(pipe: Pipeline, x) -> np.ndarray:
+    """OneVsRest(LogReg) collapses to 1-D if a label has only one class in
+    the training fold. Force a 2-D array so downstream thresholding works."""
+    proba = pipe.predict_proba(x)
+    if proba.ndim == 1:
+        proba = proba.reshape(-1, 1)
+    return proba
+
+
 def train(df: pd.DataFrame, threshold: float = 0.4) -> dict:
     x = df["text"].astype(str).tolist()
     mlb = MultiLabelBinarizer()
@@ -139,13 +148,13 @@ def train(df: pd.DataFrame, threshold: float = 0.4) -> dict:
     # ----- primary model: RandomForest (best F1) -----
     pipeline = _build_rf_pipeline()
     pipeline.fit(x_train, y_train)
-    proba = pipeline.predict_proba(x_test)
+    proba = _safe_predict_proba(pipeline, x_test)
     y_pred = (proba >= threshold).astype(int)
 
     # ----- companion model: LogisticRegression (interpretable) -----
     interpretable = _build_logreg_pipeline()
     interpretable.fit(x_train, y_train)
-    interp_proba = interpretable.predict_proba(x_test)
+    interp_proba = _safe_predict_proba(interpretable, x_test)
     interp_pred = (interp_proba >= threshold).astype(int)
 
     metrics = {
