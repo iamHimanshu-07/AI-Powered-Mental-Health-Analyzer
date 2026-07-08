@@ -1,0 +1,107 @@
+{
+  "threshold": 0.4,
+  "primary_model": "OneVsRest(RandomForest, n=200)",
+  "interpretable_model": "OneVsRest(LogisticRegression, liblinear, C=1.0)",
+  "primary": {
+    "hamming_loss": 0.24420529801324503,
+    "accuracy": 0.12665562913907286,
+    "precision_micro": 0.6944131983502062,
+    "recall_micro": 0.8353631032927379,
+    "f1_micro": 0.7583947583947583,
+    "f1_macro": 0.7068685636205863
+  },
+  "interpretable": {
+    "hamming_loss": 0.23365066225165562,
+    "accuracy": 0.12417218543046357,
+    "precision_micro": 0.7128325508607198,
+    "recall_micro": 0.821831303563374,
+    "f1_micro": 0.7634611355541588,
+    "f1_macro": 0.6890275646905967
+  },
+  "labels": [
+    "anger",
+    "brain dysfunction (forget)",
+    "emptiness",
+    "hopelessness",
+    "loneliness",
+    "sadness",
+    "suicide intent",
+    "worthlessness"
+  ],
+  "n_train": 4829,
+  "n_test": 1208,
+  "classification_report": {
+    "anger": {
+      "precision": 0.6643478260869565,
+      "recall": 0.7262357414448669,
+      "f1-score": 0.6939146230699365,
+      "support": 526.0
+    },
+    "brain dysfunction (forget)": {
+      "precision": 0.7126436781609196,
+      "recall": 0.2743362831858407,
+      "f1-score": 0.3961661341853035,
+      "support": 226.0
+    },
+    "emptiness": {
+      "precision": 0.6371134020618556,
+      "recall": 0.6866666666666666,
+      "f1-score": 0.6609625668449198,
+      "support": 450.0
+    },
+    "hopelessness": {
+      "precision": 0.7070707070707071,
+      "recall": 0.995260663507109,
+      "f1-score": 0.8267716535433071,
+      "support": 844.0
+    },
+    "loneliness": {
+      "precision": 0.6826086956521739,
+      "recall": 0.8234265734265734,
+      "f1-score": 0.7464342313787639,
+      "support": 572.0
+    },
+    "sadness": {
+      "precision": 0.7610324729392173,
+      "recall": 0.9978165938864629,
+      "f1-score": 0.8634860651865848,
+      "support": 916.0
+    },
+    "suicide intent": {
+      "precision": 0.8089887640449438,
+      "recall": 0.7128712871287128,
+      "f1-score": 0.7578947368421053,
+      "support": 303.0
+    },
+    "worthlessness": {
+      "precision": 0.6064209274673008,
+      "recall": 0.8542713567839196,
+      "f1-score": 0.7093184979137691,
+      "support": 597.0
+    },
+    "micro avg": {
+      "precision": 0.6944131983502062,
+      "recall": 0.8353631032927379,
+      "f1-score": 0.7583947583947583,
+      "support": 4434.0
+    },
+    "macro avg": {
+      "precision": 0.6975283091855093,
+      "recall": 0.758860645753769,
+      "f1-score": 0.7068685636205863,
+      "support": 4434.0
+    },
+    "weighted avg": {
+      "precision": 0.6965917780357649,
+      "recall": 0.8353631032927379,
+      "f1-score": 0.7489354833803953,
+      "support": 4434.0
+    },
+    "samples avg": {
+      "precision": 0.6744018054241564,
+      "recall": 0.8513826474298328,
+      "f1-score": 0.7064358103265388,
+      "support": 4434.0
+    }
+  }
+}

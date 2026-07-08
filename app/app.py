@@ -367,8 +367,11 @@ def render_sidebar(metrics: dict | None) -> dict:
         show_metrics = st.checkbox("Show model metrics", value=True)
         st.markdown("---")
 
-        primary = metrics.get("primary") or {}
-        interp = metrics.get("interpretable") or {}
+        # ``metrics`` can be ``None`` if ``models/metrics.json`` is missing
+        # (e.g. the file lives under a gitignored directory on Streamlit
+        # Cloud). Use safe accessors so the sidebar still renders.
+        primary = (metrics or {}).get("primary") or {}
+        interp = (metrics or {}).get("interpretable") or {}
 
         if metrics and primary:
             with st.expander("📊 Model metrics", expanded=show_metrics):

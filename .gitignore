@@ -16,6 +16,11 @@ myenv/
 models/
 notebooks/*.pkl
 
+# But the small metrics.json *is* safe to commit (and is required for the
+# sidebar to show F1/Precision/Recall on Streamlit Community Cloud, where
+# the ``models/`` directory would otherwise be empty).
+!models/metrics.json
+
 # Streamlit runtime artifacts (machine id, credentials — never commit).
 .streamlit/secrets.toml
 .streamlit/credentials.toml
