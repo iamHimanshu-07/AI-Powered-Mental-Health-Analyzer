@@ -620,7 +620,7 @@ def make_pdf(
     pdf.set_text_color(30, 27, 46)    # BRAND text
     pdf.set_font("Helvetica", "", 9)
     pdf.cell(0, 5, _pdf_safe(
-        f"Generated: {datetime.now(ZoneInfo('Asia/Kolkata')).strftime('%d-%m-%Y %I:%M:%S %p IST')}"  |   "
+        f"Generated: {datetime.now(ZoneInfo('Asia/Kolkata')).strftime('%d-%m-%Y %I:%M:%S %p IST')}  |   "
         f"Threshold: {threshold:.2f}"
     ), ln=1)
     pdf.ln(2)
